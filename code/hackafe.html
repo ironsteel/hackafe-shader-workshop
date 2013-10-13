@@ -365,32 +365,26 @@
                     fast.addVector(lightWorldPos, lightWorldPos, v3t2);
 
                     //      view: view,
-                    //      projection: projection,
+                    //      projection: project	ion,
                     //      viewProjection: viewProjection,
 
                     Log("--Draw sphere---------------------------------------");
                     sphere.drawPrep(sphereConst);
-                    var across = 6;
                     var lightColor = spherePer.lightColor;
-                    var half = (across - 1) * 0.5;
-                    for (var xx = 0; xx < across; ++xx) {
-                        for (var yy = 0; yy < across; ++yy) {
-                            for (var zz = 0; zz < across; ++zz) {
-                                lightColor[0] = xx / across;
-                                lightColor[1] = yy / across;
-                                lightColor[2] = zz / across;
-                                var scale = (xx + yy + zz) % 4 / 4 + 0.5;
-                                fast.matrix4.scaling(m4t0, [scale, scale, scale]);
-                                fast.matrix4.translation(m4t1, [xx - half, yy - half, zz - half]);
+   
+
+
+                                lightColor[0] = 1 / 2;
+                                lightColor[1] = 2 / 2;
+                                lightColor[2] = 3 / 2;
+                                fast.matrix4.scaling(m4t0, [9, 9, 9]);
+                                fast.matrix4.translation(m4t1, [0, 0, 0]);
                                 fast.matrix4.mul(world, m4t0, m4t1);
                                 fast.matrix4.mul(worldViewProjection, world, viewProjection);
                                 fast.matrix4.inverse(worldInverse, world);
                                 fast.matrix4.transpose(worldInverseTranspose, worldInverse);
                                 sphere.draw(spherePer);
-                            }
-                        }
-                    }
-
+                                
                     // Set the alpha to 255.
                     gl.colorMask(false, false, false, true);
                     gl.clearColor(0, 0, 0, 1);
