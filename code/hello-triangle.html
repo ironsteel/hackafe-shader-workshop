@@ -1,0 +1,514 @@
+<!--
+ * Copyright 2009, Google Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following disclaimer
+ * in the documentation and/or other materials provided with the
+ * distribution.
+ *     * Neither the name of Google Inc. nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+    "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <title>WebGL TDL Example</title>
+        <style>
+            html, body {
+                width: 100%;
+                height: 100%;
+                border: 0px;
+                padding: 0px;
+                margin: 0px;
+                background-color: red;
+                font-family: sans-serif;
+                overflow: hidden;
+                color: #fff;
+            }
+            a {
+                color: #fff;
+            }
+            #info {
+                font-size: small;
+                position: absolute;
+                top: 0px; width: 100%;
+                padding: 5px;
+                text-align: center;
+                z-index: 2;
+            }
+            CANVAS {
+                background-color: gray;
+            }
+            .fpsContainer {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                z-index: 2;
+                color: white;
+                font-family: sans-serif;
+                background-color: rgba(0,0,0,0.5);
+                border-radius: 10px;
+                padding: 10px;
+            }
+            #viewContainer {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+        <script type="text/javascript" src="tdl/base.js"></script>
+        <script type="text/javascript">
+            tdl.require('tdl.buffers');
+            tdl.require('tdl.fast');
+            tdl.require('tdl.fps');
+            tdl.require('tdl.log');
+            tdl.require('tdl.math');
+            tdl.require('tdl.models');
+            tdl.require('tdl.primitives');
+            tdl.require('tdl.programs');
+            tdl.require('tdl.textures');
+            tdl.require('tdl.webgl');
+            window.onload = initialize;
+
+            // globals
+            var gl;                   // the gl context.
+            var canvas;               // the canvas
+            var math;                 // the math lib.
+            var fast;                 // the fast math lib.
+            var g_fpsTimer;           // object to measure frames per second;
+            var g_logGLCalls = true;  // whether or not to log webgl calls
+            var g_debug = false;      // whether or not to debug.
+            var g_drawOnce = false;   // draw just one frame.
+            var g_mousePressed = false;
+
+            //g_drawOnce = true;
+            //g_debug = true;
+
+            var g_eyeSpeed = 0.5;
+            var g_eyeHeight = 2;
+            var g_eyeRadius = 9;
+            var g_eyeTarget = new Float32Array(3);
+            var g_eyePosition = new Float32Array(3);
+            g_eyePosition[0] = 10;
+            g_eyePosition[1] = 5;
+            g_eyePosition[2] = -5;
+            var g_mousePos = {x: 0, y: 0};
+
+            function ValidateNoneOfTheArgsAreUndefined(functionName, args) {
+                for (var ii = 0; ii < args.length; ++ii) {
+                    if (args[ii] === undefined) {
+                        tdl.error("undefined passed to gl." + functionName + "(" +
+                                tdl.webgl.glFunctionArgsToString(functionName, args) + ")");
+                    }
+                }
+            }
+
+            function Log(msg) {
+                if (g_logGLCalls) {
+                    tdl.log(msg);
+                }
+            }
+
+            function LogGLCall(functionName, args) {
+                if (g_logGLCalls) {
+                    ValidateNoneOfTheArgsAreUndefined(functionName, args)
+                    tdl.log("gl." + functionName + "(" +
+                            tdl.webgl.glFunctionArgsToString(functionName, args) + ")");
+                }
+            }
+
+            function createProgramFromTags(vertexTagId, fragmentTagId) {
+                return tdl.programs.loadProgram(
+                        document.getElementById(vertexTagId).text,
+                        document.getElementById(fragmentTagId).text);
+            }
+
+            /**
+             * Sets up Planet.
+             */
+            function setupSphere() {
+                var textures = {
+                    diffuseSampler: tdl.textures.loadTexture('unshaded1024.jpg')};
+                var program = createProgramFromTags(
+                        'sphereVertexShader',
+                        'sphereFragmentShader');
+                var arrays = tdl.primitives.createSphere(0.4, 50, 50);
+
+                return new tdl.models.Model(program, arrays, textures);
+            }
+            
+            function  setupTriangle() {
+                var textures = {
+                    diffuseSampler: tdl.textures.loadTexture('unshaded1024.jpg')
+                };
+                var program = createProgramFromTags(
+                        'sphereVertexShader',
+                        'sphereFragmentShader');
+                var positions = new tdl.primitives.AttribBuffer(3, 3);
+                positions.push([0, 5, 0]);
+                positions.push([0, -5, 0]);
+                positions.push([5, 0, 0]);
+                
+                var normals = new tdl.primitives.AttribBuffer(3, 3);
+                normals.push([0, 5, 0]);
+                normals.push([0, -5, 0]);
+                normals.push([5, 0, 0]);
+                
+                var colors = new tdl.primitives.AttribBuffer(3, 3);
+                colors.push([1, 0, 0]);
+                colors.push([0, 1, 0]);
+                colors.push([0, 0, 1]);
+                
+                
+                
+                var indices = new tdl.primitives.AttribBuffer(3, 1, 'Uint16Array');
+                indices.push([0, 1, 2]);
+                
+                
+                var texCoords = new tdl.primitives.AttribBuffer(2, 3);
+                texCoords.push([0, 0]);
+                texCoords.push([1, 0]);
+                texCoords.push([0, 1]);
+                
+                var triangleAttributes = {
+                    position : positions,
+                    normal : normals,
+                    texCoords: texCoords,
+                    indices: indices,
+                    colors: colors
+                };
+                
+                return new tdl.models.Model(program, triangleAttributes, textures);
+                
+            }
+
+            /**
+             * copied from glMatrix library
+             */
+            var multiplyVec3 = function(a, b, c) {
+                c || (c = b);
+                var d = b[0], e = b[1];
+                b = b[2];
+                c[0] = a[0] * d + a[4] * e + a[8] * b + a[12];
+                c[1] = a[1] * d + a[5] * e + a[9] * b + a[13];
+                c[2] = a[2] * d + a[6] * e + a[10] * b + a[14];
+                return c
+            };
+
+            var rotMat = new Float32Array(16);
+            function eventHandler_mouseMove(e)
+            {
+                var info = getEventInfo(e);
+                var dx = info.mouse.x - g_mousePos.x;
+                var dy = info.mouse.y - g_mousePos.y;
+
+                if (g_mousePressed)
+                {
+                    fast.subVector(g_eyePosition, g_eyePosition, g_eyeTarget);
+
+                    dx /= 300;
+                    dy /= 300;
+
+                    rotMat[0] = Math.cos(dx);
+                    rotMat[1] = -Math.sin(dx);
+                    rotMat[4] = Math.sin(dx);
+                    rotMat[5] = Math.cos(dx);
+
+                    multiplyVec3(rotMat, g_eyePosition);
+//                    fast.mulMatrix4Vector(g_eyePosition, rotMat, g_eyePosition);
+
+                    var xaxis = new Float32Array(3);
+                    fast.normalize(xaxis, g_eyePosition);
+                    fast.negativeVector(xaxis, xaxis);
+                    xaxis = [-xaxis[1], xaxis[0], 0.0];
+
+                    fast.identity4(rotMat);
+                    fast.matrix4.axisRotate(rotMat, xaxis, dy);
+                    multiplyVec3(rotMat, g_eyePosition);
+
+                    fast.addVector(g_eyePosition, g_eyePosition, g_eyeTarget);
+                }
+
+                g_mousePos.x = info.mouse.x;
+                g_mousePos.y = info.mouse.y;
+            }
+
+            function eventHandler_mouseWheel(e)
+            {
+                var info = getEventInfo(e);
+                var dir = Math.abs(info.wheel) / info.wheel;
+
+                var distVec = new Float32Array(3);
+                fast.subVector(distVec, g_eyePosition, g_eyeTarget);
+                var distance = math.length(g_eyePosition);
+
+                fast.normalize(distVec, distVec);
+                fast.mulScalarVector(distVec, dir * distance / 10, distVec);
+
+                fast.addVector(g_eyePosition, g_eyePosition, distVec);
+            }
+
+            function getEventInfo(event) {
+                event = event ? event : window.event;
+                var element = event.target ? event.target : event.srcElement;
+                return {
+                    event: event,
+                    element: element,
+                    name: (element.id ? element.id : ('->' + element.toString())),
+                    wheel: (event.detail ? event.detail : -event.wheelDelta),
+                    shift: (event.modifiers ? (event.modifiers & Event.SHIFT_MASK) : event.shiftKey),
+                    mouse: {
+                        button: event.keyCode,
+                        x: event.x ? event.x : event.screenX,
+                        y: event.y ? event.y : event.screenY,
+                    }
+                };
+            }
+
+            function initialize() {
+                math = tdl.math;
+                fast = tdl.fast;
+                canvas = document.getElementById("canvas");
+                g_fpsTimer = new tdl.fps.FPSTimer();
+
+                gl = tdl.webgl.setupWebGL(canvas);
+                if (!gl) {
+                    return false;
+                }
+                if (g_debug) {
+                    gl = tdl.webgl.makeDebugContext(gl, undefined, LogGLCall);
+                }
+
+                canvas.addEventListener('mousedown', function() {
+                    g_mousePressed = true;
+                }, false);
+                canvas.addEventListener('mouseup', function() {
+                    g_mousePressed = false;
+                }, false);
+                canvas.addEventListener('mousemove', eventHandler_mouseMove, false);
+                canvas.addEventListener('mousewheel', eventHandler_mouseWheel, false);
+
+                Log("--Setup Sphere---------------------------------------");
+                var sphere = setupSphere();
+                var triangle = setupTriangle();
+
+                var then = 0.0;
+                var clock = 0.0;
+                var fpsElem = document.getElementById("fps");
+
+                // pre-allocate a bunch of arrays
+                var projection = new Float32Array(16);
+                var view = new Float32Array(16);
+                var world = new Float32Array(16);
+                var worldInverse = new Float32Array(16);
+                var worldInverseTranspose = new Float32Array(16);
+                var viewProjection = new Float32Array(16);
+                var worldViewProjection = new Float32Array(16);
+                var viewInverse = new Float32Array(16);
+                var viewProjectionInverse = new Float32Array(16);
+                var up = new Float32Array([0, 0, 1]);
+                var lightWorldPos = new Float32Array(3);
+                var m4t0 = new Float32Array(16);
+                var m4t1 = new Float32Array(16);
+
+                var one4 = new Float32Array([1, 1, 1, 1]);
+
+                // Sphere uniforms.
+                var sphereConst = {
+                    viewInverse: viewInverse,
+                    lightWorldPos: lightWorldPos,
+                    specular: one4,
+                    shininess: 50,
+                    specularFactor: 0.2};
+                var spherePer = {
+                    lightColor: new Float32Array([0, 0, 0, 1]),
+                    world: world,
+                    worldViewProjection: worldViewProjection,
+                    worldInverse: worldInverse,
+                    worldInverseTranspose: worldInverseTranspose};
+
+                var frameCount = 0;
+                function render() {
+                    ++frameCount;
+                    if (!g_drawOnce) {
+                        tdl.webgl.requestAnimationFrame(render, canvas);
+                    }
+                    var now = (new Date()).getTime() * 0.001;
+                    var elapsedTime;
+                    if (then == 0.0) {
+                        elapsedTime = 0.0;
+                    } else {
+                        elapsedTime = now - then;
+                    }
+                    then = now;
+
+                    g_fpsTimer.update(elapsedTime);
+                    fpsElem.innerHTML = g_fpsTimer.averageFPS;
+
+
+                    gl.colorMask(true, true, true, true);
+                    gl.depthMask(true);
+                    gl.clearColor(0, 0, 0, 0);
+                    gl.clearDepth(1);
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+
+                    gl.enable(gl.CULL_FACE);
+                    gl.enable(gl.DEPTH_TEST);
+
+                    fast.matrix4.perspective(
+                            projection,
+                            math.degToRad(60),
+                            canvas.clientWidth / canvas.clientHeight,
+                            1,
+                            5000);
+                    fast.matrix4.lookAt(
+                            view,
+                            g_eyePosition,
+                            g_eyeTarget,
+                            up);
+                    fast.matrix4.mul(viewProjection, view, projection);
+                    fast.matrix4.inverse(viewInverse, view);
+                    fast.matrix4.inverse(viewProjectionInverse, viewProjection);
+
+                    lightWorldPos[0] = 5*4;
+                    lightWorldPos[1] = -5*4;
+                    lightWorldPos[2] = 5*4;
+
+                    Log("--Draw sphere---------------------------------------");
+                    triangle.drawPrep(sphereConst);
+                    var lightColor = spherePer.lightColor;
+
+
+
+                    lightColor[0] = 1;
+                    lightColor[1] = 1;
+                    lightColor[2] = 1;
+                    fast.matrix4.scaling(m4t0, [1, 1, 1]);
+                    fast.matrix4.translation(m4t1, [0, 0, 0]);
+                    fast.matrix4.rotationX(m4t1, 3.14/2);
+                    fast.matrix4.mul(world, m4t0, m4t1);
+                    fast.matrix4.mul(worldViewProjection, world, viewProjection);
+                    fast.matrix4.inverse(worldInverse, world);
+                    fast.matrix4.transpose(worldInverseTranspose, worldInverse);
+                    triangle.draw(spherePer);
+
+                    // Set the alpha to 255.
+                    gl.colorMask(false, false, false, true);
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+
+                    // turn off logging after 1 frame.
+                    g_logGLCalls = false;
+                }
+                render();
+                return true;
+            }
+        </script>
+    </head>
+    <body>
+        <div id="info"><a href="http://threedlibrary.googlecode.com" target="_blank">tdl.js</a> - example</div>
+        <div class="fpsContainer">
+            <div class="fps">fps: <span id="fps"></div>
+        </div>
+        <div id="viewContainer">
+            <canvas id="canvas" width="1024" height="1024" style="width: 100%; height: 100%;"></canvas>
+        </div>
+    </body>
+    <script id="sphereVertexShader" type="text/something-not-javascript">
+        uniform mat4 worldViewProjection;
+        
+        uniform vec3 lightWorldPos;
+        
+        uniform mat4 world;
+        uniform mat4 viewInverse;
+        uniform mat4 worldInverseTranspose;
+
+        attribute vec4 position;
+        attribute vec3 normal;
+        attribute vec2 texCoords;
+        attribute vec3 colors;
+    
+        varying vec4 v_position;
+        varying vec2 v_texCoord;
+        varying vec3 v_normal;
+        varying vec3 v_surfaceToLight;
+        varying vec3 v_surfaceToView;
+        varying vec3 v_colors;
+        
+        void main() {
+            v_texCoord = texCoords;
+            v_position = (worldViewProjection * position);
+            v_normal = (worldInverseTranspose * vec4(normal, 0)).xyz;
+            v_surfaceToLight = lightWorldPos - (world * position).xyz;
+            v_surfaceToView = (viewInverse[3] - (world * position)).xyz;
+            v_colors = colors;
+            gl_Position = v_position;
+        }
+
+    </script>
+    <script id="sphereFragmentShader" type="text/something-not-javascript">
+        #ifdef GL_ES
+        precision highp float;
+        #endif
+        uniform vec4 lightColor;
+
+        varying vec4 v_position;
+        varying vec2 v_texCoord;
+        varying vec3 v_normal;
+        varying vec3 v_surfaceToLight;
+        varying vec3 v_surfaceToView;
+        varying vec3 v_colors;
+
+        uniform sampler2D diffuseSampler;
+        uniform vec4 specular;
+        uniform sampler2D bumpSampler;
+        uniform float shininess;
+        uniform float specularFactor;
+
+        vec4 lit(float l ,float h, float m) {
+        return vec4(1.0,
+        max(l, 0.0),
+        (l > 0.0) ? pow(max(0.0, h), m) : 0.0,
+        1.0);
+        }
+        void main() {
+        vec4 diffuse = texture2D(diffuseSampler, v_texCoord);
+        vec3 normal = normalize(v_normal);
+        vec3 surfaceToLight = normalize(v_surfaceToLight);
+        vec3 surfaceToView = normalize(v_surfaceToView);
+        vec3 halfVector = normalize(surfaceToLight + surfaceToView);
+        vec4 litR = lit(dot(normal, surfaceToLight),dot(normal, halfVector), shininess);
+        
+//        gl_FragColor = vec4((
+//        lightColor * (diffuse * litR.y
+//                        + specular * litR.z * specularFactor)).rgb,
+//        diffuse.a);
+
+          
+         
+          gl_FragColor = vec4(v_colors, 1.0);
+        }
+    </script>
+</html>
+
+
